@@ -1,8 +1,4 @@
 ﻿#nullable disable
-#pragma warning disable CS0618
-
-// Copyright (c) The Avalonia Project. All rights reserved.
-// Licensed under the MIT license. See licence.md file in the project root for full license information.
 
 using System;
 using System.Linq;
@@ -28,21 +24,23 @@ namespace Avalonia.Native
         {
             var events = new SystemDialogEvents();
 
+            var nativeParent = GetNativeWindow(parent);
+
             if (dialog is OpenFileDialog ofd)
             {
-                _native.OpenFileDialog((parent as WindowImpl)?.Native,
-                                        events, ofd.AllowMultiple,
+                _native.OpenFileDialog(nativeParent,
+                                        events, ofd.AllowMultiple.AsComBool(),
                                         ofd.Title ?? "",
-                                        ofd.InitialDirectory ?? "",
+                                        ofd.Directory ?? "",
                                         ofd.InitialFileName ?? "",
                                         string.Join(";", dialog.Filters.SelectMany(f => f.Extensions)));
             }
             else
             {
-                _native.SaveFileDialog((parent as WindowImpl)?.Native,
+                _native.SaveFileDialog(nativeParent,
                                         events,
                                         dialog.Title ?? "",
-                                        dialog.InitialDirectory ?? "",
+                                        dialog.Directory ?? "",
                                         dialog.InitialFileName ?? "",
                                         string.Join(";", dialog.Filters.SelectMany(f => f.Extensions)));
             }
@@ -54,13 +52,21 @@ namespace Avalonia.Native
         {
             var events = new SystemDialogEvents();
 
-            _native.SelectFolderDialog((parent as WindowImpl)?.Native, events, dialog.Title ?? "", dialog.InitialDirectory ?? "");
+            var nativeParent = GetNativeWindow(parent);
+
+            _native.SelectFolderDialog(nativeParent, events, dialog.Title ?? "", dialog.Directory ?? "");
 
             return events.Task.ContinueWith(t => { events.Dispose(); return t.Result.FirstOrDefault(); });
         }
+
+        private IAvnWindow GetNativeWindow(IWindowBaseImpl window)
+        {
+            return null;
+            //return (window?.PlatformImpl as WindowImpl)?.Native;
+        }
     }
 
-    internal class SystemDialogEvents : CallbackBase, IAvnSystemDialogEvents
+    internal unsafe class SystemDialogEvents : CallbackBase, IAvnSystemDialogEvents
     {
         private TaskCompletionSource<string[]> _tcs;
 
@@ -71,13 +77,13 @@ namespace Avalonia.Native
 
         public Task<string[]> Task => _tcs.Task;
 
-        public void OnCompleted(int numResults, IntPtr trFirstResultRef)
+        public void OnCompleted(int numResults, void* trFirstResultRef)
         {
             string[] results = new string[numResults];
 
             unsafe
             {
-                var ptr = (IntPtr*)trFirstResultRef.ToPointer();
+                var ptr = (IntPtr*)trFirstResultRef;
 
                 for (int i = 0; i < numResults; i++)
                 {

@@ -14,8 +14,9 @@ namespace Avalonia.Native
     class ClipboardImpl : IClipboard
     {
         private IAvnClipboard _native;
+        private const string NSPasteboardTypeString = "public.utf8-plain-text";
 
-        public ClipboardImpl(IAvnClipboard native)
+        public ClipboardImpl (IAvnClipboard native)
         {
             _native = native;
         }
@@ -29,7 +30,7 @@ namespace Avalonia.Native
 
         public unsafe Task<string> GetTextAsync()
         {
-            using (var text = _native.GetText())
+            using (var text = _native.GetText(NSPasteboardTypeString))
             {
                 var result = System.Text.Encoding.UTF8.GetString((byte*)text.Pointer(), text.Length());
 
@@ -39,15 +40,10 @@ namespace Avalonia.Native
 
         public Task SetTextAsync(string text)
         {
-            _native.Clear();
+            _native.Clear ();
 
             if (text != null)
-            {
-                using (var buffer = new Utf8Buffer(text))
-                {
-                    _native.SetText(buffer.DangerousGetHandle());
-                }
-            }
+                _native.SetText (NSPasteboardTypeString, text);
 
             return Task.CompletedTask;
         }

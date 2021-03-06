@@ -1,12 +1,12 @@
 ﻿#nullable disable
 
-// Copyright (c) The Avalonia Project. All rights reserved.
-// Licensed under the MIT license. See licence.md file in the project root for full license information.
 using System;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using Avalonia.Controls.Platform;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
+using Avalonia.MicroCom;
 using Avalonia.Native.Interop;
 //using Avalonia.OpenGL;
 using Avalonia.Platform;
@@ -19,6 +19,7 @@ namespace Avalonia.Native
     {
         private readonly IAvaloniaNativeFactory _factory;
         private AvaloniaNativePlatformOptions _options;
+        //private AvaloniaNativePlatformOpenGlInterface _platformGl;
 
         [DllImport("libAvaloniaNative")]
         static extern IntPtr CreateAvaloniaNative();
@@ -31,7 +32,7 @@ namespace Avalonia.Native
 
         public static AvaloniaNativePlatform Initialize(IntPtr factory, AvaloniaNativePlatformOptions options)
         {
-            var result =  new AvaloniaNativePlatform(new IAvaloniaNativeFactory(factory));
+            var result =  new AvaloniaNativePlatform(MicroComRuntime.CreateProxyFor<IAvaloniaNativeFactory>(factory, true));
             result.DoInitialize(options);
 
             return result;
@@ -60,17 +61,13 @@ namespace Avalonia.Native
 
         //public void SetupApplicationMenuExporter ()
         //{
-        //    var exporter = new AvaloniaNativeMenuExporter(_factory);
+        //    var exporter = new AvaloniaNativeMenuExporter (_factory);
         //}
 
         //public void SetupApplicationName ()
         //{
-        //    if(!string.IsNullOrWhiteSpace(Application.Current.Name))
-        //    {
-        //        using (var buffer = new Utf8Buffer(Application.Current.Name))
-        //        {
-        //            _factory.MacOptions.SetApplicationTitle(buffer.DangerousGetHandle());
-        //        }
+        //    if (!string.IsNullOrWhiteSpace (Application.Current.Name)) {
+        //        _factory.MacOptions.SetApplicationTitle(Application.Current.Name);
         //    }
         //}
 
@@ -79,21 +76,29 @@ namespace Avalonia.Native
             _factory = factory;
         }
 
+        class GCHandleDeallocator : CallbackBase, IAvnGCHandleDeallocatorCallback
+        {
+            public void FreeGCHandle(IntPtr handle)
+            {
+                GCHandle.FromIntPtr(handle).Free();
+            }
+        }
+        
         void DoInitialize(AvaloniaNativePlatformOptions options)
         {
             _options = options;
-            _factory.Initialize();
+            _factory.Initialize(new GCHandleDeallocator());
             //if (_factory.MacOptions != null)
             //{
             //    var macOpts = AvaloniaLocator.Current.GetService<MacOSPlatformOptions>();
 
-            //    _factory.MacOptions.ShowInDock = macOpts?.ShowInDock != false ? 1 : 0;
+            //    _factory.MacOptions.SetShowInDock(macOpts?.ShowInDock != false ? 1 : 0);
             //}
 
             //AvaloniaLocator.CurrentMutable
             //    .Bind<IPlatformThreadingInterface>()
             //    .ToConstant(new PlatformThreadingInterface(_factory.CreatePlatformThreadingInterface()))
-            //    .Bind<IStandardCursorFactory>().ToConstant(new CursorFactory(_factory.CreateCursorFactory()))
+            //    .Bind<ICursorFactory>().ToConstant(new CursorFactory(_factory.CreateCursorFactory()))
             //    .Bind<IPlatformIconLoader>().ToSingleton<IconLoader>()
             //    .Bind<IKeyboardDevice>().ToConstant(KeyboardDevice)
             //    .Bind<IPlatformSettings>().ToConstant(this)
@@ -102,9 +107,22 @@ namespace Avalonia.Native
             //    .Bind<IRenderLoop>().ToConstant(new RenderLoop())
             //    .Bind<IRenderTimer>().ToConstant(new DefaultRenderTimer(60))
             //    .Bind<ISystemDialogImpl>().ToConstant(new SystemDialogs(_factory.CreateSystemDialogs()))
-            //    .Bind<IWindowingPlatformGlFeature>().ToConstant(new GlPlatformFeature(_factory.ObtainGlFeature()))
-            //    .Bind<PlatformHotkeyConfiguration>().ToConstant(new PlatformHotkeyConfiguration(InputModifiers.Windows))
-            //    .Bind<IMountedVolumeInfoProvider>().ToConstant(new MacOSMountedVolumeInfoProvider());
+            //    .Bind<PlatformHotkeyConfiguration>().ToConstant(new PlatformHotkeyConfiguration(KeyModifiers.Meta))
+            //    .Bind<IMountedVolumeInfoProvider>().ToConstant(new MacOSMountedVolumeInfoProvider())
+            //    .Bind<IPlatformDragSource>().ToConstant(new AvaloniaNativeDragSource(_factory));
+
+            //if (_options.UseGpu)
+            //{
+            //    try
+            //    {
+            //        AvaloniaLocator.CurrentMutable.Bind<IPlatformOpenGlInterface>()
+            //            .ToConstant(_platformGl = new AvaloniaNativePlatformOpenGlInterface(_factory.ObtainGlDisplay()));
+            //    }
+            //    catch (Exception)
+            //    {
+            //        // ignored
+            //    }
+            //}
         }
 
         public IWindowImpl CreateWindow()
@@ -112,14 +130,14 @@ namespace Avalonia.Native
             return new WindowImpl(_factory, _options);
         }
 
-        //public IEmbeddableWindowImpl CreateEmbeddableWindow()
-        //{
-        //    throw new NotImplementedException();
-        //}
+        public IWindowImpl CreateEmbeddableWindow()
+        {
+            throw new NotImplementedException();
+        }
 
         public IPopupImpl CreatePopup ()
         {
-            return new PopupImpl (_factory, _options);
+            return new PopupImpl (_factory, _options, null);
         }
 
         public IAvaloniaNativeFactory Factory => _factory;
@@ -147,7 +165,7 @@ namespace Avalonia.Native
             set
             {
                 _showInDock = value;
-                _opts.ShowInDock = value ? 1 : 0;
+                _opts.SetShowInDock(value ? 1 : 0);
             }
         }
     }
